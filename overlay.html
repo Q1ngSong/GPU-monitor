@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GPU Monitor 浮窗</title>
+  </head>
+  <body>
+    <div id="overlay-shell">
+      <div id="edit-toolbar" hidden>
+        <span id="drag-handle" title="拖动浮窗，边缘调整宽度">⠿ 拖动 · 调整宽度</span>
+        <button id="open-details" type="button">详情</button>
+        <button id="finish-edit" type="button">完成调整</button>
+      </div>
+      <div id="demo-label" hidden>演示数据</div>
+      <div id="readout"></div>
+      <div id="overlay-error" role="status" hidden></div>
+    </div>
+    <script type="module" src="/src/overlay.ts"></script>
+  </body>
+</html>

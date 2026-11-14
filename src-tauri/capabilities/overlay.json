@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "overlay-window",
+  "description": "Read live monitoring data and move the overlay while adjusting it",
+  "windows": ["overlay", "overlay-handle"],
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
+}

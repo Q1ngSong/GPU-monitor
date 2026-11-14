@@ -1,0 +1,25 @@
+node_modules/
+dist/
+app/
+src-tauri/target/
+src-tauri/gen/
+.tools/
+.local/
+*.log
+test-results/
+.DS_Store
+
+# Local connections, monitoring history, and credentials never belong in source control.
+.env
+.env.*
+!.env.example
+.ssh/
+servers.json
+history.json
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+gpu_monitor_ed25519*

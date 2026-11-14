@@ -1,0 +1,36 @@
+[package]
+name = "gpu-monitor"
+version = "0.1.0"
+description = "A small SSH GPU monitor for your menu bar"
+edition = "2021"
+rust-version = "1.90"
+default-run = "gpu-monitor"
+
+[[bin]]
+name = "gpu-monitor-cli"
+path = "src/cli_main.rs"
+
+[lib]
+name = "gpu_monitor_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["process", "time", "sync", "rt", "io-util", "net"] }
+csv = "1"
+shell-words = "1"
+uuid = { version = "1", features = ["v4"] }
+dirs = "7"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+panic = "abort"

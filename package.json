@@ -1,0 +1,23 @@
+{
+  "name": "gpu-monitor",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "test": "node --test src/*.test.ts",
+    "tauri": "tauri",
+    "desktop": "tauri dev",
+    "package": "node scripts/release.mjs",
+    "package:cli": "node scripts/release.mjs --cli"
+  },
+  "dependencies": { "@tauri-apps/api": "^2.10.0" },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1",
+    "@types/node": "^24.0.0"
+  }
+}
