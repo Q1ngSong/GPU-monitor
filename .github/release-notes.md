@@ -2,6 +2,8 @@ GPU Monitor 首个 Windows / macOS 安装版。
 
 支持服务器自定义名称、远程 NVIDIA GPU 监控、可选远程 CPU / 系统内存、透明浮窗与历史曲线。Apple 芯片 Mac 可直接监控本机 GPU 利用率及统一内存，Windows 可直接监控本机 NVIDIA GPU。
 
+Mac 菜单栏每张 GPU 显示一个状态圆点：红色忙碌、绿色空闲、灰色离线或数据未知。点击圆点或 Dock 图标打开详细面板；透明浮窗可独立关闭，并已修复切换桌面后消失的问题。
+
 ## 下载与安装
 
 - **Windows x64**：下载 `GPU-Monitor_0.1.0_windows-x64-setup.exe` 并运行安装。需要 WebView2；本机 NVIDIA 监控需已安装驱动及 `nvidia-smi`。

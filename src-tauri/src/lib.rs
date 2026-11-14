@@ -6,6 +6,8 @@ mod local;
 mod overlay;
 mod schedule;
 mod ssh;
+#[cfg(any(target_os = "macos", test))]
+mod tray_status;
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -368,34 +370,33 @@ fn persist(state: &AppState, snapshot: &Snapshot) -> Result<(), String> {
 
 fn publish(app: &tauri::AppHandle) {
     let snapshot = app.state::<AppState>().snapshot.lock().unwrap().clone();
-    let online: Vec<_> = snapshot
-        .servers
-        .iter()
-        .filter(|s| {
-            let monitor = snapshot.monitor(&s.config.id);
-            (monitor.gpu_enabled && s.status == "online")
-                || (monitor.cpu_enabled && s.cpu.is_some() && s.cpu_error.is_none())
-        })
-        .collect();
-    let gpus: Vec<_> = online
-        .iter()
-        .filter(|s| s.status == "online" && snapshot.monitor(&s.config.id).gpu_enabled)
-        .flat_map(|s| &s.gpus)
-        .collect();
-    let total = gpus.len();
-    let available = gpus.into_iter().filter(|g| g.available()).count();
-    if let Some(tray) = app.tray_by_id("gpu") {
-        let _ = tray.set_tooltip(Some(format!(
-            "GPU Monitor · {available}/{total} 张低负载 · {}/{} 台在线",
-            online.len(),
-            snapshot.servers.len()
-        )));
-        #[cfg(target_os = "macos")]
-        let _ = tray.set_title(Some(if total > 0 {
-            format!("{available}/{total}")
-        } else {
-            "GPU —".into()
-        }));
+    #[cfg(target_os = "macos")]
+    tray_status::update(app);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let online: Vec<_> = snapshot
+            .servers
+            .iter()
+            .filter(|s| {
+                let monitor = snapshot.monitor(&s.config.id);
+                (monitor.gpu_enabled && s.status == "online")
+                    || (monitor.cpu_enabled && s.cpu.is_some() && s.cpu_error.is_none())
+            })
+            .collect();
+        let gpus: Vec<_> = online
+            .iter()
+            .filter(|s| s.status == "online" && snapshot.monitor(&s.config.id).gpu_enabled)
+            .flat_map(|s| &s.gpus)
+            .collect();
+        let total = gpus.len();
+        let available = gpus.into_iter().filter(|g| g.available()).count();
+        if let Some(tray) = app.tray_by_id("gpu") {
+            let _ = tray.set_tooltip(Some(format!(
+                "GPU Monitor · {available}/{total} 张低负载 · {}/{} 台在线",
+                online.len(),
+                snapshot.servers.len()
+            )));
+        }
     }
     let _ = app.emit("snapshot", snapshot);
 }
@@ -964,6 +965,8 @@ async fn poll(app: tauri::AppHandle) {
         for config in cpu_jobs {
             tauri::async_runtime::spawn(sample_cpu(app.clone(), config));
         }
+        #[cfg(target_os = "macos")]
+        tray_status::update(&app);
         let _ = tokio::time::timeout(Duration::from_secs(1), state.refresh.notified()).await;
     }
 }
@@ -1226,7 +1229,7 @@ pub fn run() {
                     &quit,
                 ],
             )?;
-            // A monochrome chip glyph stays legible as a macOS template icon.
+            // Windows keeps the chip glyph; macOS replaces it with live status dots below.
             let mut pixels = vec![0u8; 32 * 32 * 4];
             for y in 0..32 {
                 for x in 0..32 {
@@ -1243,7 +1246,7 @@ pub fn run() {
             }
             TrayIconBuilder::with_id("gpu")
                 .icon(tauri::image::Image::new_owned(pixels, 32, 32))
-                .icon_as_template(true)
+                .icon_as_template(!cfg!(target_os = "macos"))
                 .tooltip("GPU Monitor")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
@@ -1305,7 +1308,14 @@ pub fn run() {
                 })
                 .build(app)?;
             #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            {
+                app.set_activation_policy(tauri::ActivationPolicy::Regular);
+                if let Some(window) = app.get_webview_window("main") {
+                    window.set_visible_on_all_workspaces(true)?;
+                }
+                app.manage(tray_status::State::default());
+                tray_status::update(app.handle());
+            }
             let (overlay_settings, overlay_layout) = {
                 let state = app.state::<AppState>();
                 let snapshot = state.snapshot.lock().unwrap();
@@ -1360,8 +1370,14 @@ pub fn run() {
             open_main_window,
             overlay::resize_overlay_content
         ])
-        .run(tauri::generate_context!())
-        .expect("GPU Monitor failed to start");
+        .build(tauri::generate_context!())
+        .expect("GPU Monitor failed to start")
+        .run(|_app, _event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = _event {
+                show_window(_app);
+            }
+        });
 }
 
 #[cfg(test)]
@@ -1403,7 +1419,7 @@ mod settings_tests {
         assert!(snapshot.monitor("local").gpu_enabled);
     }
 
-    fn snapshot() -> Snapshot {
+    pub(super) fn snapshot() -> Snapshot {
         let mut servers = vec![];
         for id in ["inherited", "custom"] {
             let mut server = ServerView::new(ServerConfig {

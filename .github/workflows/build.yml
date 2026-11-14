@@ -36,6 +36,10 @@ jobs:
       - name: Add macOS targets
         if: runner.os == 'macOS' && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v'))
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2.9.3
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.name }}-${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
       - run: npm ci
       - run: npm test
       - run: npm run build
@@ -64,8 +68,8 @@ jobs:
         run: |
           app='src-tauri/target/universal-apple-darwin/release/bundle/macos/GPU Monitor.app'
           codesign --verify --deep --strict --verbose=2 "$app"
-          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/gpu-monitor"
-          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/gpu-monitor-cli"
+          lipo "$app/Contents/MacOS/gpu-monitor" -verify_arch arm64 x86_64
+          lipo "$app/Contents/MacOS/gpu-monitor-cli" -verify_arch arm64 x86_64
           "$app/Contents/MacOS/gpu-monitor-cli" --version
           hdiutil verify src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
       - name: Prepare release assets
