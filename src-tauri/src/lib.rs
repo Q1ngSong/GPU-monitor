@@ -1134,10 +1134,22 @@ async fn sample_cpu(app: tauri::AppHandle, config: ServerConfig) {
 
 fn show_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        #[cfg(target_os = "macos")]
+        let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
     }
+}
+
+fn hide_window(app: &tauri::AppHandle) -> tauri::Result<()> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.hide()?;
+        // The readout and menu-bar icon keep running without a Dock entry.
+        #[cfg(target_os = "macos")]
+        app.set_activation_policy(tauri::ActivationPolicy::Accessory)?;
+    }
+    Ok(())
 }
 
 pub fn run() {
@@ -1284,7 +1296,7 @@ pub fn run() {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
                             if window.is_visible().unwrap_or(false) {
-                                let _ = window.hide();
+                                let _ = hide_window(app);
                             } else {
                                 if let Ok(scale) = window.scale_factor() {
                                     let p = rect.position.to_physical::<f64>(scale);
@@ -1329,6 +1341,10 @@ pub fn run() {
             overlay::on_window_event(window, event);
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
+                if window.label() == "main" {
+                    let _ = hide_window(window.app_handle());
+                    return;
+                }
                 if window.label() == "overlay" || window.label() == "overlay-handle" {
                     let app = window.app_handle();
                     let mut settings = app

@@ -212,7 +212,7 @@ $("#add-dialog").addEventListener("click", event => {
 });
 $("#close-add").onclick = () => $<HTMLDialogElement>("#add-dialog").close();
 $("#add-dialog").addEventListener("close", () => { $<HTMLInputElement>("#server-password").value = ""; });
-$("#hide").onclick = () => { if (desktop) void getCurrentWindow().hide(); };
+$("#hide").onclick = () => { if (desktop) void getCurrentWindow().close().catch(error => notify(String(error))); };
 $("#refresh").onclick = () => { if (desktop) void invoke("refresh_now").catch(e => notify(String(e))); else notify("演示预览不连接真实服务器。"); };
 $("#titlebar").onmousedown = event => { if (desktop && event.button === 0 && !(event.target as HTMLElement).closest("button")) void getCurrentWindow().startDragging(); };
 $("#all-filter").onclick = () => setFilter(false);
