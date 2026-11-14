@@ -11,6 +11,14 @@ function snapshot(): Snapshot {
 }
 
 describe("overlay values", () => {
+  it("distinguishes Apple shared memory from dedicated VRAM", () => {
+    const state = snapshot();
+    state.servers[0].source = "local";
+    Object.assign(state.servers[0].gpus[0], { name: "Apple M4", unifiedMemory: true, memoryUsed: 1536, memoryTotal: 16384 });
+    assert.partialDeepStrictEqual(overlayRows(state, "one", 101)[0].metrics[0], { unifiedMemory: true, memory: "1.5/16.0", state: "live" });
+    state.servers[0].gpus[0].memoryUsed = null;
+    assert.strictEqual(overlayRows(state, "one", 101)[0].metrics[0].memory, null);
+  });
   it("local overlays retain GPU values while ignoring inherited CPU monitoring", () => {
     const state = snapshot();
     state.servers[0].source = "local";

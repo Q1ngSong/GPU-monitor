@@ -2,17 +2,17 @@
 
 把本机和远程 GPU 的状态，放到桌面一角。
 
-一个小而简洁的桌面监控工具。直接读取本机 NVIDIA GPU，也可以通过 SSH 连接多台服务器，查看每张 GPU 的利用率、显存和历史趋势。提供 Agent 可以直接读取的 JSON 接口。
+一个小而简洁的桌面监控工具。直接读取 Apple 芯片 Mac 的本机 GPU 或 Windows/Linux 的 NVIDIA GPU，也可以通过 SSH 连接多台服务器，查看每张 GPU 的利用率、显存和历史趋势。提供 Agent 可以直接读取的 JSON 接口。
 
 白色面板、蓝色利用率曲线、橙色显存曲线。需要时展开，平时留一个透明浮窗。
 
-**Windows 已完成本机验证；macOS 已有状态栏实现与构建配置，尚待编译与实机验证。**
+**Windows 已完成本机验证；macOS 已完成 Apple 芯片与 Intel 通用版编译，并在 Apple 芯片 Mac 上验证启动、本机 Apple M4 与远程 GPU 显示。Intel 真机与多屏行为仍待验证。**
 
 ## 功能
 
 | 功能 | 说明 |
 | --- | --- |
-| 本机 GPU | 直接读取本机 NVIDIA GPU，无需 SSH 或密码 |
+| 本机 GPU | Apple 芯片 Mac / Windows、Linux 的 NVIDIA GPU，无需 SSH 或密码 |
 | 多服务器监控 | 每张 GPU 独立显示型号、利用率、显存和温度 |
 | 历史折线 | 默认最近 1 小时，可调整为 15 分钟至 24 小时 |
 | 透明浮窗 | 始终置顶、可调透明度，鼠标移入时隐藏内容并显示拖动柄 |
@@ -26,7 +26,9 @@
 
 目前从源码构建，见下方[开发与构建](#开发与构建)。
 
-**添加本机 GPU**：打开 App，点击右上角 **＋ → 本机**。本机需有 NVIDIA GPU、驱动及可用的 `nvidia-smi`，无需填写 SSH、端口、用户名或密码。本机 GPU 使用相同的刷新设置、历史曲线、透明浮窗和 CLI。本机 CPU，以及 Apple／AMD／Intel 本机 GPU 暂不支持。
+**添加本机 GPU**：打开 App，点击右上角 **＋ → 本机**。Apple 芯片 Mac 直接读取系统 GPU 统计，无需管理员密码；Windows/Linux 需有 NVIDIA GPU、驱动及可用的 `nvidia-smi`。无需填写 SSH、端口、用户名或密码。本机 GPU 使用相同的刷新设置、历史曲线、透明浮窗和 CLI。本机 CPU、AMD 和 Intel GPU 暂不支持。
+
+**Apple GPU 指标**：显示型号、利用率、GPU 正在使用的统一内存及历史。内存格式为 **GPU 使用 / 系统总量**，总量由 CPU 与 GPU 共享，不是独立显存容量或 GPU 可用额度；没有可靠读数的温度等指标保持未知。采集来自 Apple 驱动的只读统计，已在 Apple M4 上验证；这些驱动字段可能随 macOS 版本变化。
 
 **添加远程服务器**：本机需有 OpenSSH；远端需为 Linux，通过 `nvidia-smi` 提供 NVIDIA GPU 指标。CPU 与内存指标来自 `/proc`。
 
@@ -38,6 +40,8 @@
 添加远程服务器时，App 会检测本机 SSH 密钥；没有可用密钥时，创建 `~/.ssh/gpu_monitor_ed25519`，并把公钥追加到服务器账户的 `authorized_keys`。已有内容会保留。
 
 顶部仅保留 **设置、添加、刷新、收起**。点击设置打开面板，按钮保持按下状态；再次点击返回主页面。关闭主窗口会收起到托盘，监控继续运行；从托盘菜单选择退出才会停止。
+
+**自定义设备名称**：点击设备标题右侧的 **⋯ → 重命名**，输入 `autodl`、`训练机` 等代号并保存。名称会同步显示在主面板、浮窗、设置页和 CLI 中，重启后保留；连接地址、密钥和历史记录不变。
 
 ## 透明浮窗
 
@@ -68,7 +72,7 @@ GPU 默认按当前利用率安排下一次采样：
 
 历史长度可选 **15 分钟、30 分钟、1 小时、3 小时、6 小时、24 小时**。记录保存在本机，重启后恢复；延长窗口不会补齐过去未采集的数据。断线或长时间缺失采样时，曲线留空，后台自动重试。
 
-**“低负载”** 要求利用率与显存占用都低于 10%，仅表示当前采样状态，不代表 GPU 已被预留。GPU 利用率也不等于 FLOPS 或训练速度。
+**“低负载”** 针对独立显存 GPU，要求利用率与显存占用都低于 10%，Apple 统一内存 GPU 不参与该统计，仅表示当前采样状态，不代表 GPU 已被预留。GPU 利用率也不等于 FLOPS 或训练速度。
 
 ## Agent CLI
 
@@ -100,7 +104,7 @@ Agent 在其他工作目录执行时，请使用可执行文件的完整路径�
 
 `status` 默认按配置选择 CPU／GPU，本机默认不查询 CPU；`--cpu`、`--gpu` 只改变本次查询。显式为本机指定 `--cpu` 会返回不支持的采集错误及退出码 `2`。`status` 和 `history` 均支持用 `--server` 选择本机或远程条目的 ID／完整名称，名称重复时请使用 ID。
 
-正常结果包含 `schemaVersion`、`sampledAt`、`data` 三个顶层字段，当前结构版本为 `1`。GPU 数据包括编号、UUID、型号、利用率、显存已用／总量和温度；未知指标为 `null`。**CLI 的内存与显存单位为 MiB，利用率为百分比，时间为 Unix 秒；界面显示为 GiB。** 设置中的刷新间隔为秒，历史长度为分钟。
+正常结果包含 `schemaVersion`、`sampledAt`、`data` 三个顶层字段，当前结构版本为 `1`。GPU 数据包括编号、UUID、型号、利用率、内存已用／总量和温度；未知指标为 `null`。`unifiedMemory: true` 表示 Apple 统一内存，此时 `memoryUsed` 为 GPU 正在使用的内存，`memoryTotal` 为共享的系统物理内存总量；历史样本也保留此标记。**CLI 的内存与显存单位为 MiB，利用率为百分比，时间为 Unix 秒；界面显示为 GiB。** 设置中的刷新间隔为秒，历史长度为分钟。
 
 退出码：**0** 成功，**1** 参数或配置错误，**2** 至少一个采集器失败。部分采集失败时仍返回其他结果；参数或配置错误返回 `{ "schemaVersion": 1, "error": "..." }`。
 
@@ -151,6 +155,15 @@ npm run package
 | Agent CLI | `src-tauri/target/release/gpu-monitor-cli`，Windows 带 `.exe` |
 | 安装包 | `src-tauri/target/release/bundle/` |
 
+在 macOS 上构建 Apple 芯片与 Intel 通用版：
+
+```sh
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+APPLE_SIGNING_IDENTITY=- npm run package -- --target universal-apple-darwin --bundles app,dmg -- --locked
+```
+
+通用产物位于 `src-tauri/target/universal-apple-darwin/release/`，其中 DMG 位于 `bundle/dmg/`。打包前会自动合并两种架构的独立 CLI，同时将它包含在 App 内。上述命令使用本地临时签名，不包含 Apple 公证；对外分发时需配置自己的开发者签名与公证。
+
 Windows 构建完成后，可整理为便携目录并创建桌面快捷方式：
 
 ```powershell
@@ -163,8 +176,8 @@ GitHub 工作流在 `main` 提交和 PR 时运行 Windows／macOS 检查；手�
 
 ## 当前范围
 
-支持本机 NVIDIA GPU，以及 Linux 远端服务器的 NVIDIA GPU、CPU／系统内存监控。本机 CPU、Apple／AMD／Intel 本机 GPU、AMD／Intel 远程 GPU、MIG 实例级统计、进程列表与开机自启尚未实现。macOS 可用来监控远程服务器，不提供 Apple GPU 本机指标。
+支持 Apple 芯片 Mac 本机 GPU、Windows/Linux 本机 NVIDIA GPU，以及 Linux 远端服务器的 NVIDIA GPU、CPU／系统内存监控。本机 CPU、AMD／Intel 本机 GPU、AMD／Intel 远程 GPU、MIG 实例级统计、进程列表与开机自启尚未实现。Apple GPU 暂不提供温度、功耗和频率。
 
-macOS 的实际多屏行为、签名与公证仍待验证。当前仓库尚未添加开源许可证。
+macOS 已验证本地签名完整性；Intel 真机、实际多屏行为、开发者签名与公证仍待验证。当前仓库尚未添加开源许可证。
 
 开发约定见 [PROJECT.md](PROJECT.md)。

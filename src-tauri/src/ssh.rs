@@ -421,12 +421,15 @@ pub struct Gpu {
     pub utilization: Option<f64>,
     pub memory_used: Option<f64>,
     pub memory_total: Option<f64>,
+    #[serde(default)]
+    pub unified_memory: bool,
     pub temperature: Option<f64>,
 }
 
 impl Gpu {
     pub fn available(&self) -> bool {
-        matches!((self.utilization, self.memory_used, self.memory_total), (Some(u), Some(m), Some(t)) if u < 10.0 && t > 0.0 && m / t < 0.1)
+        !self.unified_memory
+            && matches!((self.utilization, self.memory_used, self.memory_total), (Some(u), Some(m), Some(t)) if u < 10.0 && t > 0.0 && m / t < 0.1)
     }
 }
 
@@ -452,6 +455,7 @@ pub fn parse_gpus(text: &str) -> Result<Vec<Gpu>, String> {
             utilization,
             memory_used: number(&row[4])?,
             memory_total: number(&row[5])?,
+            unified_memory: false,
             temperature: number(&row[6])?,
         });
     }

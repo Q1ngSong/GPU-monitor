@@ -11,6 +11,8 @@ pub struct Sample {
     pub utilization: Option<f64>,
     pub memory_used: Option<f64>,
     pub memory_total: Option<f64>,
+    #[serde(default)]
+    pub unified_memory: bool,
     #[serde(default = "default_interval")]
     pub interval_seconds: u64,
 }
@@ -38,6 +40,7 @@ pub fn record(
             utilization: if online { gpu.utilization } else { None },
             memory_used: if online { gpu.memory_used } else { None },
             memory_total: gpu.memory_total,
+            unified_memory: gpu.unified_memory,
             interval_seconds,
         };
         if samples.last().is_some_and(|s| s.at == at) {
@@ -91,6 +94,7 @@ mod tests {
             utilization: Some(95.0),
             memory_used: Some(1024.0),
             memory_total: Some(2048.0),
+            unified_memory: false,
             temperature: None,
         };
         let mut history = GpuHistory::new();

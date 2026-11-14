@@ -5,6 +5,7 @@ export interface OverlayMetric {
   label: string;
   utilization: number | null;
   memory: string | null;
+  unifiedMemory?: boolean;
   state: "live" | "offline" | "stale" | "waiting";
 }
 
@@ -35,6 +36,7 @@ export function overlayRows(snapshot: Snapshot, serverId: string | null, now: nu
         const state = stateOf(server.status === "online" && !server.error, at, due, now);
         metrics.push({
           key: gpu.uuid, label: `GPU ${gpu.index}`, state,
+          unifiedMemory: gpu.unifiedMemory ?? false,
           utilization: state === "live" && Number.isFinite(gpu.utilization) ? gpu.utilization : null,
           memory: state === "live" && gpu.memoryUsed !== null && gpu.memoryTotal !== null && gpu.memoryTotal > 0 ? `${gib(gpu.memoryUsed)}/${gib(gpu.memoryTotal)}` : null,
         });

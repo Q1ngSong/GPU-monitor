@@ -1,13 +1,23 @@
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+pub use macos::query_gpus;
+
+#[cfg(any(not(target_os = "macos"), test))]
 use crate::ssh;
+#[cfg(not(target_os = "macos"))]
+use std::time::Duration;
+#[cfg(any(not(target_os = "macos"), test))]
 use std::{
     path::{Path, PathBuf},
     process::Stdio,
-    time::Duration,
 };
+#[cfg(any(not(target_os = "macos"), test))]
 use tokio::process::Command;
 
+#[cfg(not(target_os = "macos"))]
 const UNSUPPORTED: &str =
-    "本机监控目前支持 Windows/Linux 上的 NVIDIA GPU，暂不支持 Apple、AMD 或 Intel GPU。";
+    "本机监控支持 Windows/Linux 上的 NVIDIA GPU 和 macOS 上的 Apple GPU，暂不支持 AMD 或 Intel GPU。";
 
 #[cfg(any(target_os = "windows", target_os = "linux", test))]
 fn path_candidates(path: Option<&std::ffi::OsStr>, binary: &str) -> Vec<PathBuf> {
@@ -30,6 +40,7 @@ fn find_executable(
         .find(|candidate| candidate.is_absolute() && candidate.is_file())
 }
 
+#[cfg(not(target_os = "macos"))]
 fn find_nvidia_smi() -> Result<PathBuf, String> {
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
@@ -69,6 +80,7 @@ fn find_nvidia_smi() -> Result<PathBuf, String> {
     }
 }
 
+#[cfg(any(not(target_os = "macos"), test))]
 fn query_command(program: &Path, uuids: Option<&[String]>) -> Result<Command, String> {
     let mut command = Command::new(program);
     command
@@ -87,6 +99,7 @@ fn query_command(program: &Path, uuids: Option<&[String]>) -> Result<Command, St
 }
 
 /// Query the local driver directly; no shell, SSH credentials or elevated process is involved.
+#[cfg(not(target_os = "macos"))]
 pub async fn query_gpus(uuids: Option<&[String]>) -> Result<Vec<ssh::Gpu>, String> {
     let program = find_nvidia_smi()?;
     let mut command = query_command(&program, uuids)?;

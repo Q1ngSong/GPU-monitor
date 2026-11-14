@@ -109,6 +109,7 @@ describe("live capacity", () => {
     assert.strictEqual(isAvailable({ ...gpu, memoryUsed: 20000 }), false);
     assert.strictEqual(isAvailable({ ...gpu, utilization: null }), false);
     assert.strictEqual(isAvailable({ ...gpu, memoryTotal: 0 }), false);
+    assert.strictEqual(isAvailable({ ...gpu, unifiedMemory: true }), false);
   });
   it("excludes stale data after disconnection from totals", () => {
     assert.deepStrictEqual(summary({ interval: 15, refreshing: false, servers: [{ id: "one", name: "one", sshCommand: "ssh host", target: "host", status: "error", error: "timeout", updatedAt: 1, gpus: [gpu] }] }), { online: 0, total: 0, available: 0 });

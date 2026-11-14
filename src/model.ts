@@ -5,6 +5,7 @@ export interface Gpu {
   utilization: number | null;
   memoryUsed: number | null;
   memoryTotal: number | null;
+  unifiedMemory?: boolean;
   temperature: number | null;
 }
 
@@ -13,6 +14,7 @@ export interface Sample {
   utilization: number | null;
   memoryUsed: number | null;
   memoryTotal: number | null;
+  unifiedMemory?: boolean;
   intervalSeconds?: number;
 }
 
@@ -120,7 +122,7 @@ export function chartSegments(samples: Sample[], metric: "utilization" | "memory
 
 /** A low-load hint requires both live utilization and memory measurements. */
 export function isAvailable(gpu: Gpu): boolean {
-  return gpu.utilization !== null && gpu.utilization < 10 &&
+  return !gpu.unifiedMemory && gpu.utilization !== null && gpu.utilization < 10 &&
     gpu.memoryUsed !== null && gpu.memoryTotal !== null && gpu.memoryTotal > 0 &&
     gpu.memoryUsed / gpu.memoryTotal < 0.1;
 }

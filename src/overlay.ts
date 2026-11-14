@@ -49,7 +49,7 @@ const stateLabels = { live: "", offline: "已断线", stale: "已过期", waitin
 function metricHtml(metric: OverlayMetric): string {
   const unavailable = metric.state !== "live";
   const number = metric.utilization === null ? "—" : `${Math.round(metric.utilization)}<small>%</small>`;
-  return `<span class="resource ${unavailable ? "unavailable" : ""}" title="${stateLabels[metric.state] || (metric.utilization === null ? "利用率未知" : "当前采样")}"><span class="resource-label">${metric.label}</span><strong>${number}</strong>${metric.memory !== null ? `<span class="memory"><span>显存</span> ${metric.memory}<small> GiB</small></span>` : ""}${unavailable ? `<small class="state-label">${stateLabels[metric.state]}</small>` : ""}</span>`;
+  return `<span class="resource ${unavailable ? "unavailable" : ""}" title="${stateLabels[metric.state] || (metric.utilization === null ? "利用率未知" : "当前采样")}"><span class="resource-label">${metric.label}</span><strong>${number}</strong>${metric.memory !== null ? `<span class="memory" title="${metric.unifiedMemory ? "GPU 使用 / 系统总量，CPU 与 GPU 共享" : "已用 / 总显存"}"><span>${metric.unifiedMemory ? "统一内存" : "显存"}</span> ${metric.memory}<small> GiB</small></span>` : ""}${unavailable ? `<small class="state-label">${stateLabels[metric.state]}</small>` : ""}</span>`;
 }
 
 function render() {

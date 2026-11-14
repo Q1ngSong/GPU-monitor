@@ -45,12 +45,6 @@ jobs:
       - name: Build Windows CLI
         if: runner.os == 'Windows' && github.event_name == 'workflow_dispatch'
         run: npm run package:cli
-      - name: Build universal macOS CLI
-        if: runner.os == 'macOS' && github.event_name == 'workflow_dispatch'
-        run: |
-          npm run package:cli -- --target aarch64-apple-darwin
-          npm run package:cli -- --target x86_64-apple-darwin
-          lipo -create src-tauri/target/aarch64-apple-darwin/release/gpu-monitor-cli src-tauri/target/x86_64-apple-darwin/release/gpu-monitor-cli -output src-tauri/target/universal-apple-darwin/release/gpu-monitor-cli
       - uses: actions/upload-artifact@v7
         if: github.event_name == 'workflow_dispatch'
         with:

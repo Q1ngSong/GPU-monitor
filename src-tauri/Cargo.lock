@@ -1376,6 +1376,7 @@ version = "0.1.0"
 dependencies = [
  "csv",
  "dirs",
+ "plist",
  "serde",
  "serde_json",
  "shell-words",

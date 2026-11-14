@@ -70,7 +70,7 @@ impl ServerConfig {
 
     async fn query_cpu(&self, home: &Path) -> Result<cpu::Cpu, String> {
         match self.source {
-            Source::Local => Err("本机目前仅支持 NVIDIA GPU 监控，暂不支持本机 CPU。".into()),
+            Source::Local => Err("本机目前仅支持 GPU 监控，暂不支持本机 CPU。".into()),
             Source::Ssh => cpu::query(&ssh::parse_connection(&self.ssh_command)?, home).await,
         }
     }
@@ -551,6 +551,28 @@ fn add_local(app: tauri::AppHandle) -> Result<String, String> {
     publish(&app);
     state.refresh.notify_one();
     Ok(id)
+}
+
+#[tauri::command]
+fn rename_server(app: tauri::AppHandle, id: String, name: String) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 80 || name.chars().any(char::is_control) {
+        return Err("名称请填写 1–80 个字，不能包含换行或控制字符。".into());
+    }
+    let state = app.state::<AppState>();
+    let mut guard = state.snapshot.lock().unwrap();
+    let mut updated = guard.clone();
+    let server = updated
+        .servers
+        .iter_mut()
+        .find(|server| server.config.id == id)
+        .ok_or("设备已移除，请重新选择。")?;
+    server.config.name = name.to_string();
+    persist(&state, &updated)?;
+    *guard = updated;
+    drop(guard);
+    publish(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -1058,6 +1080,7 @@ async fn sample_cpu(app: tauri::AppHandle, config: ServerConfig) {
                         utilization: cpu.utilization,
                         memory_used: Some(cpu.memory_used),
                         memory_total: Some(cpu.memory_total),
+                        unified_memory: false,
                         temperature: None,
                     };
                     history::record(
@@ -1082,6 +1105,7 @@ async fn sample_cpu(app: tauri::AppHandle, config: ServerConfig) {
                         utilization: None,
                         memory_used: None,
                         memory_total: server.cpu.as_ref().map(|c| c.memory_total),
+                        unified_memory: false,
                         temperature: None,
                     };
                     history::record(
@@ -1315,6 +1339,7 @@ pub fn run() {
             add_connection,
             add_server,
             add_local,
+            rename_server,
             remove_server,
             set_refresh_policy,
             set_monitor,
@@ -1398,6 +1423,7 @@ mod settings_tests {
                     utilization: Some(0.0),
                     memory_used: Some(0.0),
                     memory_total: Some(100.0),
+                    unified_memory: false,
                     temperature: None,
                 })
                 .collect();

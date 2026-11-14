@@ -26,6 +26,7 @@ let availableOnly = false;
 let addSource: "local" | "ssh" = "local";
 let setupId: string | null = null;
 let removeId: string | null = null;
+let renameId: string | null = null;
 let prompt: { id: string; text: string; confirmation: boolean } | null = null;
 let toastTimer: ReturnType<typeof setTimeout>;
 let settingsSaving = false;
@@ -44,13 +45,20 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
   </main>
   <main id="settings-page" hidden><div class="settings-title"><button id="back-settings" class="icon-button" aria-label="返回监控">${icon("arrow", "back-arrow")}</button><h1>设置</h1></div><p class="muted settings-intro">分别调整浮窗、监控内容和刷新间隔。<br>单独设置优先于全局默认。</p><div id="settings-content"></div><p class="form-note">历史最长保留 24 小时。延长历史窗口后，从已有采样继续积累，不回填过去数据。自动模式按本次利用率决定下次间隔，变化在下次采样时发现。</p></main>
   <div id="toast" role="status" hidden></div>
-  <dialog id="load-dialog"><div class="dialog-heading"><h2>什么是低负载？</h2><button class="icon-button" id="close-load" aria-label="关闭说明">${icon("close")}</button></div><p class="muted">一张 GPU 同时满足以下两项时，标记为低负载：</p><ul class="load-explanation"><li>GPU 利用率 <strong>低于 10%</strong></li><li>显存占用 <strong>低于总量的 10%</strong></li></ul><p class="form-note">这可以排除“暂时没在计算，但显存仍被占用”的情况。断线或指标未知的卡不计入低负载。</p><p class="form-note">这是当前采样的参考，不代表资源已预留，也不保证你的任务一定能运行。</p></dialog>
+  <dialog id="load-dialog"><div class="dialog-heading"><h2>什么是低负载？</h2><button class="icon-button" id="close-load" aria-label="关闭说明">${icon("close")}</button></div><p class="muted">一张 GPU 同时满足以下两项时，标记为低负载：</p><ul class="load-explanation"><li>GPU 利用率 <strong>低于 10%</strong></li><li>显存占用 <strong>低于总量的 10%</strong></li></ul><p class="form-note">这可以排除“暂时没在计算，但显存仍被占用”的情况。断线或指标未知的卡不计入低负载。</p><p class="form-note">这是当前采样的参考，不代表资源已预留，也不保证你的任务一定能运行。Apple GPU 使用统一内存，不参与这项低负载统计。</p></dialog>
   <dialog id="add-dialog"><form id="add-form">
     <div class="dialog-heading"><h2>添加设备</h2><button type="button" class="icon-button" id="close-add" aria-label="关闭">${icon("close")}</button></div>
     <div class="add-source" role="group" aria-label="监控来源"><button type="button" data-add-source="local" aria-pressed="true">本机</button><button type="button" data-add-source="ssh" aria-pressed="false">SSH 服务器</button></div>
-    <p class="muted" id="add-description">查看本机 NVIDIA GPU，无需 SSH 或密码。</p>
+    <p class="muted" id="add-description">查看本机 GPU，无需 SSH 或密码。</p>
     <fieldset id="ssh-fields" disabled hidden><div class="connection-fields"><label class="field">IP / 域名<input id="host" required maxlength="253" placeholder="192.168.1.100" spellcheck="false" autocomplete="off" /></label><label class="field">端口<input id="port" type="number" required min="1" max="65535" value="22" inputmode="numeric" /></label></div><label class="field">用户名<input id="username" required maxlength="64" value="root" placeholder="root" spellcheck="false" autocomplete="off" /></label><label class="field">密码<input id="server-password" type="password" placeholder="已有免密连接时可留空" autocomplete="off" /></label><div id="key-info" class="key-info">${icon("key")}<span>自动检测本机密钥；没有时创建 Ed25519 密钥。</span></div><p class="form-note">密码仅用于首次接入，不会保存。之后使用密钥自动连接。</p></fieldset>
     <p id="form-error" class="error-text" role="alert" hidden></p><button type="submit" class="primary full" id="connect-button">添加本机 ${icon("plus")}</button>
+  </form></dialog>
+  <dialog id="rename-dialog" aria-labelledby="rename-title"><form id="rename-form">
+    <div class="dialog-heading"><h2 id="rename-title">重命名设备</h2><button type="button" class="icon-button" id="close-rename" aria-label="关闭">${icon("close")}</button></div>
+    <p class="muted">起一个便于识别的名字，例如 autodl、训练机。</p>
+    <label class="field">设备名称<input id="server-name" required maxlength="80" placeholder="例如 autodl" autocomplete="off" spellcheck="false" /></label>
+    <p id="rename-error" class="error-text" role="alert" hidden></p>
+    <div class="dialog-buttons"><button type="button" class="secondary" id="cancel-rename">取消</button><button type="submit" class="primary">保存名称</button></div>
   </form></dialog>
   <dialog id="auth-dialog"><form id="auth-form"><div class="auth-symbol">${icon("key")}</div><h2 id="auth-title">验证 SSH 连接</h2><p id="auth-description" class="muted"></p><pre id="auth-prompt"></pre><label id="password-label" class="field">密码<input id="password" type="password" autocomplete="off" spellcheck="false" /></label><p class="form-note">仅传给本机 SSH 进程，不保存密码。</p><div class="dialog-buttons"><button type="button" class="secondary" id="cancel-auth">取消</button><button type="submit" class="primary" id="submit-auth">继续连接</button></div></form></dialog>
 `;
@@ -90,8 +98,9 @@ function resourceCard(gpu: Gpu, stale: boolean, samples: Sample[], minutes: numb
   const utilization = gpu.utilization;
   const age = updatedAt ? Math.max(0, Math.floor(Date.now() / 1000 - updatedAt)) : null;
   return `<article class="gpu-card ${stale ? "stale" : ""}">
-    <div class="gpu-heading"><span class="gpu-index">${cpu ? "CPU" : gpu.index.toString().padStart(2, "0")}</span><div class="gpu-name"><h3>${esc(gpu.name.replace(/^NVIDIA /, ""))}</h3><span>${stale ? "上次数据 · 已过期" : `最近 ${historyLabel(minutes)}${cpu || gpu.temperature === null ? "" : ` · ${gpu.temperature}°C`}`}</span></div><span class="load-label ${low ? "low" : ""}">${stale ? "已断线" : low ? "低负载" : utilization === null ? "未知" : cpu ? "运行中" : "使用中"}</span></div>
-    <div class="metrics"><div class="metric"><div class="metric-title"><span>${cpu ? "CPU" : "GPU"} 利用率</span><strong>${utilization === null ? "—" : `${utilization}<small>%</small>`}</strong></div>${lineChart(samples, "utilization", 100, "100%", minutes)}</div><div class="metric"><div class="metric-title"><span>${cpu ? "内存" : "显存"}</span><strong>${gib(gpu.memoryUsed)}<small> / ${gib(gpu.memoryTotal)} GiB</small></strong></div>${lineChart(samples, "memoryUsed", gpu.memoryTotal ?? 0, `${gib(gpu.memoryTotal)} GiB`, minutes)}</div></div>
+    <div class="gpu-heading"><span class="gpu-index">${cpu ? "CPU" : gpu.index.toString().padStart(2, "0")}</span><div class="gpu-name"><h3>${esc(gpu.name.replace(/^NVIDIA /, ""))}</h3><span>${stale ? "上次数据 · 已过期" : `最近 ${historyLabel(minutes)}${cpu || gpu.temperature === null ? "" : ` · ${gpu.temperature}°C`}`}</span></div><span class="load-label ${low ? "low" : ""}">${stale ? "已断线" : low ? "低负载" : utilization === null ? "未知" : cpu || gpu.unifiedMemory ? "运行中" : "使用中"}</span></div>
+    <div class="metrics"><div class="metric"><div class="metric-title"><span>${cpu ? "CPU" : "GPU"} 利用率</span><strong>${utilization === null ? "—" : `${utilization}<small>%</small>`}</strong></div>${lineChart(samples, "utilization", 100, "100%", minutes)}</div><div class="metric"><div class="metric-title"><span>${cpu ? "内存" : gpu.unifiedMemory ? "统一内存" : "显存"}</span><strong>${gib(gpu.memoryUsed)}<small> / ${gib(gpu.memoryTotal)} GiB</small></strong></div>${lineChart(samples, "memoryUsed", gpu.memoryTotal ?? 0, `${gib(gpu.memoryTotal)} GiB`, minutes)}</div></div>
+    ${gpu.unifiedMemory ? '<div class="sample-age">GPU 使用 / 系统总量 · CPU 与 GPU 共享</div>' : ""}
     <div class="sample-age">${age === null ? "等待采样" : age < 2 ? "刚刚更新" : `${age} 秒前更新`}</div>
   </article>`;
 }
@@ -105,7 +114,7 @@ function serverSection(server: Server): string {
   const gpus = monitor.gpuEnabled ? server.gpus.filter(g => !availableOnly || (gpuOnline && isAvailable(g))) : [];
   const gpuCards = gpus.map(g => resourceCard(g, !gpuOnline, server.history?.[g.uuid] ?? [], effectivePolicy(snapshot, server.id, g.uuid).historyMinutes, false, server.gpuUpdatedAt?.[g.uuid] ?? server.updatedAt ?? undefined)).join("");
   const cpuCard = monitor.cpuEnabled && !availableOnly ? server.cpu ? resourceCard({ index: 0, uuid: "CPU", name: `CPU · ${server.cpu.logicalCpus} 逻辑处理器`, utilization: server.cpu.utilization, memoryUsed: server.cpu.memoryUsed, memoryTotal: server.cpu.memoryTotal, temperature: null }, !cpuOnline, server.history?.CPU ?? [], monitor.cpuHistoryMinutes, true, server.cpu.updatedAt) : '<div class="connection-message">正在读取 CPU 与系统内存…</div>' : "";
-  return `<section class="server-section"><div class="server-heading"><div class="server-title">${icon(local ? "chip" : "server")}<h2 title="${esc(server.target)}">${esc(server.name)}</h2><span class="status-dot ${online ? "online" : monitor.cpuEnabled || monitor.gpuEnabled ? "error" : ""}"></span></div><details class="server-menu" data-server-menu="${esc(server.id)}"><summary aria-label="服务器选项">${icon("more")}</summary><div><button data-reconnect="${esc(server.id)}">${local ? "重新检测" : "重新连接"}</button><button data-remove="${esc(server.id)}" class="danger">${removeId === server.id ? "再次点击确认移除" : local ? "移除本机" : "移除服务器"}</button></div></details></div>
+  return `<section class="server-section"><div class="server-heading"><div class="server-title">${icon(local ? "chip" : "server")}<h2 title="${esc(server.target)}">${esc(server.name)}</h2><span class="status-dot ${online ? "online" : monitor.cpuEnabled || monitor.gpuEnabled ? "error" : ""}"></span></div><details class="server-menu" data-server-menu="${esc(server.id)}"><summary aria-label="服务器选项">${icon("more")}</summary><div><button data-rename="${esc(server.id)}">重命名</button><button data-reconnect="${esc(server.id)}">${local ? "重新检测" : "重新连接"}</button><button data-remove="${esc(server.id)}" class="danger">${removeId === server.id ? "再次点击确认移除" : local ? "移除本机" : "移除服务器"}</button></div></details></div>
     ${setupId === server.id ? '<div class="connection-message">正在接入… 如需密码，将在 App 内提示。</div>' : ""}
     ${monitor.gpuEnabled && server.error && setupId !== server.id ? `<div class="connection-error"><span>${local ? "本机 GPU 不可用" : "GPU 连接未就绪"}</span><p>${esc(server.error)}</p><button class="text-button" data-reconnect="${esc(server.id)}">${local ? "重新检测" : "重新连接"} ${icon("arrow")}</button></div>` : ""}
     ${monitor.cpuEnabled && server.cpuError ? `<div class="connection-error"><span>CPU 采集未就绪</span><p>${esc(server.cpuError)}</p></div>` : ""}
@@ -119,6 +128,7 @@ function render() {
   const activeControl = document.activeElement;
   const focusedServer = activeControl?.closest<HTMLDetailsElement>("[data-server-menu]")?.dataset.serverMenu;
   const focusedSelector = activeControl?.matches("summary") ? "summary"
+    : activeControl?.hasAttribute("data-rename") ? "[data-rename]"
     : activeControl?.hasAttribute("data-reconnect") ? "[data-reconnect]"
     : activeControl?.hasAttribute("data-remove") ? "[data-remove]" : null;
   const openedMenus = new Set(Array.from($("#servers").querySelectorAll<HTMLDetailsElement>("details[open]"), menu => menu.dataset.serverMenu));
@@ -145,7 +155,7 @@ function setAddSource(source: "local" | "ssh") {
   const fields = $<HTMLFieldSetElement>("#ssh-fields");
   fields.hidden = local;
   fields.disabled = local;
-  $("#add-description").textContent = local ? "查看本机 NVIDIA GPU，无需 SSH 或密码。" : "填写连接信息，即可查看服务器 GPU 状态。";
+  $("#add-description").textContent = local ? "查看本机 GPU，无需 SSH 或密码。" : "填写连接信息，即可查看服务器 GPU 状态。";
   $("#connect-button").innerHTML = local ? `添加本机 ${icon("plus")}` : `连接服务器 ${icon("arrow")}`;
   $("#form-error").hidden = true;
   document.querySelectorAll<HTMLButtonElement>("[data-add-source]").forEach(button => {
@@ -219,6 +229,19 @@ $("#servers").onclick = event => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button");
   if (!button) return;
   if (button.id === "empty-add") openAdd();
+  if (button.dataset.rename) {
+    const server = snapshot.servers.find(server => server.id === button.dataset.rename);
+    if (!server) return;
+    renameId = server.id;
+    removeId = null;
+    button.closest("details")?.removeAttribute("open");
+    $("#rename-error").hidden = true;
+    const input = $<HTMLInputElement>("#server-name");
+    input.value = server.name;
+    $<HTMLDialogElement>("#rename-dialog").showModal();
+    input.focus();
+    input.select();
+  }
   if (button.dataset.reconnect && desktop) {
     const server = snapshot.servers.find(server => server.id === button.dataset.reconnect);
     if (server?.source === "local") void invoke("refresh_now").catch(error => notify(String(error)));
@@ -231,6 +254,42 @@ $("#servers").onclick = event => {
     removeId = null;
     void invoke("remove_server", { id }).catch(e => notify(String(e)));
   }
+};
+
+$("#close-rename").onclick = $("#cancel-rename").onclick = () => $<HTMLDialogElement>("#rename-dialog").close();
+$("#rename-dialog").addEventListener("close", () => { renameId = null; });
+$("#rename-dialog").addEventListener("cancel", event => {
+  if ($<HTMLFormElement>("#rename-form").dataset.saving === "true") event.preventDefault();
+});
+$("#rename-form").onsubmit = async event => {
+  event.preventDefault();
+  const form = $<HTMLFormElement>("#rename-form");
+  if (!renameId || form.dataset.saving === "true") return;
+  const id = renameId;
+  const name = $<HTMLInputElement>("#server-name").value.trim();
+  if (!name) {
+    $("#rename-error").textContent = "请输入设备名称。";
+    $("#rename-error").hidden = false;
+    return;
+  }
+  const unlock = lockForm(form);
+  try {
+    if (desktop) {
+      await invoke("rename_server", { id, name });
+      snapshot = await invoke<Snapshot>("get_snapshot");
+    } else {
+      const server = snapshot.servers.find(server => server.id === id);
+      if (!server) throw new Error("设备已移除，请重新选择。");
+      server.name = name;
+    }
+    $<HTMLDialogElement>("#rename-dialog").close();
+    render();
+    if (!$("#settings-page").hidden) renderSettings();
+    notify(desktop ? "设备名称已保存。" : "已应用到当前演示预览。");
+  } catch (error) {
+    $("#rename-error").textContent = String(error);
+    $("#rename-error").hidden = false;
+  } finally { unlock(); }
 };
 
 function setSettingsOpen(open: boolean) {
