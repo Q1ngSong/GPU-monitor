@@ -2,6 +2,7 @@ name: Check and build
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -15,7 +16,7 @@ jobs:
             args: --bundles nsis
             name: windows
           - os: macos-latest
-            args: --target universal-apple-darwin --bundles dmg
+            args: --target universal-apple-darwin --bundles app,dmg
             name: macos-universal
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -33,7 +34,7 @@ jobs:
         with:
           components: rustfmt
       - name: Add macOS targets
-        if: runner.os == 'macOS' && github.event_name == 'workflow_dispatch'
+        if: runner.os == 'macOS' && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v'))
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - run: npm ci
       - run: npm test
@@ -41,17 +42,67 @@ jobs:
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
       - run: npm run package -- ${{ matrix.args }} -- --locked
-        if: github.event_name == 'workflow_dispatch'
-      - name: Build Windows CLI
-        if: runner.os == 'Windows' && github.event_name == 'workflow_dispatch'
-        run: npm run package:cli
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
+      - name: Verify Windows installer
+        if: runner.os == 'Windows' && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v'))
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe
+          if ($installer.Count -ne 1) { throw 'Expected exactly one Windows installer' }
+          $destination = Join-Path $env:RUNNER_TEMP 'gpu-monitor-install'
+          $process = Start-Process -FilePath $installer.FullName -ArgumentList '/S', "/D=$destination" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
+          if (!(Test-Path "$destination/gpu-monitor.exe")) { throw 'Installed app missing' }
+          & "$destination/gpu-monitor-cli.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw 'Installed CLI failed' }
+          & "$destination/gpu-monitor-cli.exe" servers --json
+          if ($LASTEXITCODE -ne 0) { throw 'Installed CLI JSON query failed' }
+      - name: Verify macOS bundle
+        if: runner.os == 'macOS' && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v'))
+        run: |
+          app='src-tauri/target/universal-apple-darwin/release/bundle/macos/GPU Monitor.app'
+          codesign --verify --deep --strict --verbose=2 "$app"
+          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/gpu-monitor"
+          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/gpu-monitor-cli"
+          "$app/Contents/MacOS/gpu-monitor-cli" --version
+          hdiutil verify src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+      - name: Prepare release assets
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+        run: node scripts/stage-release.mjs
       - uses: actions/upload-artifact@v7
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         with:
           name: gpu-monitor-${{ matrix.name }}
-          path: |
-            src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/gpu-monitor-cli.exe
-            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-            src-tauri/target/universal-apple-darwin/release/gpu-monitor-cli
+          path: app/release/*
           if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: gpu-monitor-*
+          path: app/release
+          merge-multiple: true
+      - name: Verify assets and generate checksums
+        run: |
+          node scripts/stage-release.mjs --verify
+          cd app/release
+          sha256sum GPU-Monitor_* gpu-monitor-cli_* > SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v3
+        with:
+          name: GPU Monitor ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          body_path: .github/release-notes.md
+          files: app/release/*

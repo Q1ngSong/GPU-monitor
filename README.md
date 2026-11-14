@@ -24,7 +24,7 @@
 
 ## 快速开始
 
-目前从源码构建，见下方[开发与构建](#开发与构建)。
+在 [GitHub Releases](https://github.com/Q1ngSong/GPU-monitor/releases/latest) 下载 Windows x64 安装程序或 macOS 通用 DMG。Mac 打开 DMG 后将 App 拖到 Applications；Windows 运行安装程序。安装包签名与首次打开说明见 Release 正文，也可从源码[开发与构建](#开发与构建)。
 
 **添加本机 GPU**：打开 App，点击右上角 **＋ → 本机**。Apple 芯片 Mac 直接读取系统 GPU 统计，无需管理员密码；Windows/Linux 需有 NVIDIA GPU、驱动及可用的 `nvidia-smi`。无需填写 SSH、端口、用户名或密码。本机 GPU 使用相同的刷新设置、历史曲线、透明浮窗和 CLI。本机 CPU、AMD 和 Intel GPU 暂不支持。
 
@@ -172,7 +172,9 @@ powershell -File scripts/install-local.ps1 -DesktopShortcut -Open
 
 程序会放到 `app/`，已有连接、设置和历史继续保留。
 
-GitHub 工作流在 `main` 提交和 PR 时运行 Windows／macOS 检查；手动触发时额外生成 Windows 安装包、macOS 通用 DMG 和独立 CLI，不自动创建 Release。通用 macOS 产物位于 `src-tauri/target/universal-apple-darwin/release/`。两个平台需在各自系统构建，macOS 分发还需配置签名与公证。
+GitHub 工作流在 `main` 提交和 PR 时运行 Windows／macOS 检查；手动触发时额外构建、验证 Windows 安装包、macOS 通用 DMG 和独立 CLI。推送 `vX.Y.Z` 标签时，两平台全部通过后自动发布正式 Release，并附带 SHA-256 校验文件。通用 macOS 产物位于 `src-tauri/target/universal-apple-darwin/release/`。
+
+发布前先手动运行一次工作流确认安装包检查通过，再在干净且与远端同步的 `main` 上运行 `npm run release -- X.Y.Z`。首次发布可沿用当前版本，后续版本须递增；脚本会检查、同步版本、提交并推送标签。发布说明位于 `.github/release-notes.md`。当前 Mac 使用本地签名且未公证，Windows 未使用商业代码签名；应用尚未接入自动更新。
 
 ## 当前范围
 

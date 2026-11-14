@@ -11,7 +11,8 @@
     "tauri": "tauri",
     "desktop": "tauri dev",
     "package": "node scripts/release.mjs",
-    "package:cli": "node scripts/release.mjs --cli"
+    "package:cli": "node scripts/release.mjs --cli",
+    "release": "node scripts/publish.mjs"
   },
   "dependencies": { "@tauri-apps/api": "^2.10.0" },
   "devDependencies": {
